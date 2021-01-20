@@ -1,0 +1,85 @@
+version: "3.7"
+
+services:
+    redis:
+        image: 'redis:3.2.7'
+
+    mysql:
+        image: mysql:5.7
+        container_name: airflow_db
+        volumes:
+            - airflow-mysql-data:/var/lib/mysql        
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_DATABASE: airflow
+            MYSQL_USER: airflow
+            MYSQL_PASSWORD: airflow
+        command: mysqld --character-set-server=utf8 --collation-server=utf8_unicode_ci
+
+
+    webserver:
+        image: jam717/airflow-app
+        container_name: airflow_webserver
+        restart: always
+        depends_on:
+            - mysql
+            - redis
+        ports:
+            - 8080:8080
+        environment:
+            LOAD_EX: n
+            EXECUTOR: Celery
+            TWITTER_ACCESS_TOKEN: $TWITTER_ACCESS_TOKEN
+            TWITTER_ACCESS_TOKEN_SECRET: $TWITTER_ACCESS_TOKEN_SECRET
+            TWITTER_CONSUMER_API_KEY: $TWITTER_CONSUMER_API_KEY
+            TWITTER_CONSUMER_API_SECRET_KEY: $TWITTER_CONSUMER_API_SECRET_KEY            
+        volumes:
+            - ./airflow:/usr/local/airflow/
+
+        command: webserver
+        healthcheck:
+            test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+            interval: 30s
+            timeout: 30s
+            retries: 3
+
+    flower:
+        image: jam717/airflow-app
+        container_name: airflow_flower
+        restart: always
+        depends_on:
+            - redis
+        environment:
+            EXECUTOR: Celery
+            # - REDIS_PASSWORD=redispass
+        ports:
+            - 5555:5555
+        command: flower
+
+    scheduler:
+        image: jam717/airflow-app
+        container_name: airflow_scheduler
+        restart: always
+        depends_on:
+            - webserver
+        volumes:
+            - ./airflow:/usr/local/airflow/
+        environment:
+            LOAD_EX: n
+            EXECUTOR: Celery
+        command: scheduler
+
+    worker:
+        image: jam717/airflow-app
+        container_name: airflow_worker
+        restart: always
+        depends_on:
+            - scheduler
+        volumes:
+            - ./airflow:/usr/local/airflow/
+        environment:
+             EXECUTOR: Celery
+        command: worker
+
+volumes:
+  airflow-mysql-data:        
